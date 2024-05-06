@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from tkinter import ttk
 
 # 读取数据集，数据集包含域名和标签（恶意或正常）
-data = pd.read_csv("domain_data_3w.csv")
+data = pd.read_csv("domain_data.csv")
 data['domain'] = data['domain'].astype(str)
 
 # 黑名单集合
