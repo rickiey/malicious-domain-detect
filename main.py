@@ -1,4 +1,4 @@
-# pip install -U pandas scikit-learn 
+# pip install -U pandas scikit-learn
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -12,12 +12,13 @@ from sklearn.ensemble import RandomForestClassifier
 from tkinter import ttk
 
 # 读取数据集，数据集包含域名和标签（恶意或正常）
-data = pd.read_csv("domain_data.csv")
+data = pd.read_csv("domain_data_3w.csv")
 data['domain'] = data['domain'].astype(str)
 
 # 黑名单集合
 # domain_label_map = {}
 blacklist = set()
+whitelist = set()
 
 # example:
 # icb-online-intl.com,FALSE
@@ -27,7 +28,11 @@ for index, row in data.iterrows():
     if row['label'] == False:
         # domain_label_map[row['domain']] = row['label']
         blacklist.add(row['domain'])
+    else:
+        whitelist.add(row['domain'])
 
+
+print("白名单数量: ",len(whitelist))
 print("黑名单数量: ",len(blacklist))
 
 # 提取特征：例如，域名长度、是否包含数字、是否包含特殊字符等
@@ -100,18 +105,22 @@ def detect_malicious_domain():
     domain = entry.get()
     features = [[len(domain), any(char.isdigit() for char in domain), any(char in "!@#$%^&*()-_+=~`[]{}\\|;:'\",.<>?/" for char in domain)]]
     prediction = clf.predict(features)
-    
+
     # 模型预测结果
-    if prediction[0] == 1:
+    if domain in whitelist:
+        model_result = "不是恶意域名"
+    elif domain in blacklist:
+        model_result = "是恶意域名"
+    elif prediction[0] == 1:
         model_result = "是恶意域名"
     else:
         model_result = "不是恶意域名"
 
     # 查询黑名单结果（这里用示例的方式表示，实际可以替换为真实的黑名单查询逻辑）
-    blacklist_result = "未知"
+    blacklist_result = "不在黑名单中"
     if domain in blacklist:
         blacklist_result = "在黑名单中"
-    
+
     # 显示结果
     result_tree.insert("", tk.END, values=(domain, model_result, blacklist_result))
 
