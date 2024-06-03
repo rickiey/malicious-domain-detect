@@ -1,20 +1,25 @@
 # pip install -U pandas scikit-learn
 
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import GridSearchCV
-import tkinter as tk
-from tkinter import messagebox
-from sklearn.ensemble import RandomForestClassifier
-from tkinter import ttk
+from sklearn.metrics import accuracy_score,recall_score
+# from sklearn.metrics import recall_score
+from sklearn.ensemble import GradientBoostingClassifier
+from matplotlib.ticker import MultipleLocator
+
+# import sklearn.external.joblib as extjoblib
+import joblib
 
 # 读取数据集，数据集包含域名和标签（恶意或正常）
 data = pd.read_csv("domain_data_3w.csv")
 data['domain'] = data['domain'].astype(str)
 
+plt.rcParams['font.sans-serif']=['SimHei'] #Show Chinese label
+plt.rcParams['axes.unicode_minus']=False   #The
 # 黑名单集合
 # domain_label_map = {}
 blacklist = set()
@@ -23,14 +28,13 @@ whitelist = set()
 # example:
 # icb-online-intl.com,FALSE
 # kobesportswear.date,FALSE
-
+x_gap = 5000
 for index, row in data.iterrows():
     if row['label'] == False:
         # domain_label_map[row['domain']] = row['label']
         blacklist.add(row['domain'])
     else:
         whitelist.add(row['domain'])
-
 
 print("白名单数量: ",len(whitelist))
 print("黑名单数量: ",len(blacklist))
@@ -43,103 +47,76 @@ data['has_special_chars'] = data['domain'].apply(lambda x: any(char in "!@#$%^&*
 # 划分数据集为训练集和测试集
 X = data[['length', 'has_numbers', 'has_special_chars']]
 y = data['label']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
 # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-# param_grid = {
-#     'n_estimators': [50, 100, 200],
-#     'max_depth': [None, 10, 20],
-#     'min_samples_split': [2, 5, 10],
-#     'min_samples_leaf': [1, 2, 4],
-#     'max_features': ['auto', 'sqrt']
-# }
-# 训练机器学习模型（随机森林）
-# clf = RandomForestClassifier(n_estimators=100, random_state=42)
-clf = RandomForestClassifier(n_estimators=100,max_features='sqrt',min_samples_leaf=4, min_samples_split=10)
 
-# grid_search = GridSearchCV(estimator=clf, param_grid=param_grid, cv=3, scoring='accuracy')
+# 定义和训练模型，或加载已保存的模型
+model_filename = 'random_forest_model.pkl'
+try:
+    model = joblib.load(model_filename)
+    print("模型加载成功")
+except:
+    print("无法加载模型，正在重新训练")
+    # model = GradientBoostingClassifier(n_estimators=200, random_state=42)
+    model = RandomForestClassifier(n_estimators=100,max_features='sqrt',min_samples_leaf=4, min_samples_split=10)
+    model.fit(X_train, y_train)
+    joblib.dump(model, model_filename)
+    print("模型训练完成并保存")
 
-# grid_search.fit(X_train, y_train)
-# # 输出最佳参数
-# print("Best Parameters:", grid_search.best_params_)
+# 记录不同数据量下的训练准确率、测试准确率、训练召回率和测试召回率
+train_accuracies = []
+test_accuracies = []
+train_recalls = []
+test_recalls = []
+data_sizes = []
 
-# # 输出最佳模型在验证集上的准确率
-# print("Validation Accuracy:", grid_search.best_score_)
-# exit(0)
+# 分步增加训练数据量，每步5000个样本
+for size in range(x_gap, 80001, x_gap):
+    # 根据size确定训练数据量
+    X_train_frac = X_train[:size]
+    y_train_frac = y_train[:size]
 
-clf.fit(X_train, y_train)
+    # 重新训练模型
+    model.fit(X_train_frac, y_train_frac)
 
-# 预测并评估模型
-y_pred = clf.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print("训练准确率 Accuracy:", accuracy)
+    # 记录当前数据量
+    data_sizes.append(len(X_train_frac))
 
-# 检测新域名是否恶意
-# new_domain = "zhongsou.net"
-# print("测试域名: ", new_domain)
-# new_domain_features = pd.DataFrame({
-#     'length': [len(new_domain[0])],
-#     'has_numbers': [any(char.isdigit() for char in new_domain[0])],
-#     'has_special_chars': [any(char in "!@#$%^&*()-_+=~`[]{}\\|;:'\",.<>?/" for char in new_domain[0])]
-# })
-# prediction = clf.predict(new_domain_features)
-# print("随机森林训练后预测结果 Prediction for new domain:", prediction)
+    # 预测和记录准确率、召回率
+    train_preds = model.predict(X_train_frac)
+    test_preds = model.predict(X_test)
+    accuracy_s = accuracy_score(y_train_frac, train_preds)
+    recall_sc = recall_score(y_train_frac, train_preds)
+    print(f"{size} 训练准确率  {accuracy_s:.4f}   训练召回率 {recall_sc:.4f}" )
 
-# isblack=domain_label_map.__contains__(new_domain)
-# isblack=new_domain not in domain_label_map
+    train_accuracies.append(accuracy_score(y_train_frac, train_preds))
+    test_accuracies.append(accuracy_score(y_test, test_preds))
+    train_recalls.append(recall_score(y_train_frac, train_preds))
+    test_recalls.append(recall_score(y_test, test_preds))
 
-# print("黑名单查询结果:", isblack )
+# 绘制准确率和召回率折线图
+plt.figure(figsize=(18, 10))
+plt.subplot(1, 2, 1)
 
-# 创建一个示例的黑名单
-# blacklist = {"malicious-domain.com", "example.com"}
+plt.plot(data_sizes, train_accuracies, label='训练准确率')
+plt.plot(data_sizes, test_accuracies, label='测试准确率')
+plt.xlabel('训练数据量')
+plt.ylabel('准确率')
+plt.title('训练和测试准确率随数据量的变化')
+plt.legend()
+plt.gca().xaxis.set_major_locator(MultipleLocator(x_gap))  # 设置 X 轴间隔
+# plt.gca().yaxis.set_major_locator(MultipleLocator(0.05))  # 设置 Y 轴间隔
+plt.subplot(1, 2, 2)
+plt.plot(data_sizes, train_recalls, label='训练召回率')
+plt.plot(data_sizes, test_recalls, label='测试召回率')
+plt.xlabel('训练数据量')
+plt.ylabel('召回率')
+plt.title('训练和测试召回率随数据量的变化')
+plt.legend()
 
-# 创建主窗口
-root = tk.Tk()
-root.title("恶意域名检测")
-root.geometry("800x600")  # 设置窗口大小为800x600
+plt.gca().xaxis.set_major_locator(MultipleLocator(x_gap))  # 设置 X 轴间隔
+# plt.gca().yaxis.set_major_locator(MultipleLocator(0.05))  # 设置 Y 轴间隔
 
-
-clf.fit(X_train, y_train)
-
-# 定义函数：检测域名是否是恶意域名
-def detect_malicious_domain():
-    domain = entry.get()
-    features = [[len(domain), any(char.isdigit() for char in domain), any(char in "!@#$%^&*()-_+=~`[]{}\\|;:'\",.<>?/" for char in domain)]]
-    prediction = clf.predict(features)
-
-    # 模型预测结果
-    if domain in whitelist:
-        model_result = "不是恶意域名"
-    elif domain in blacklist:
-        model_result = "是恶意域名"
-    elif prediction[0] == 1:
-        model_result = "是恶意域名"
-    else:
-        model_result = "不是恶意域名"
-
-    # 查询黑名单结果（这里用示例的方式表示，实际可以替换为真实的黑名单查询逻辑）
-    blacklist_result = "不在黑名单中"
-    if domain in blacklist:
-        blacklist_result = "在黑名单中"
-
-    # 显示结果
-    result_tree.insert("", tk.END, values=(domain, model_result, blacklist_result))
-
-# 创建标签、输入框和按钮
-label = tk.Label(root, text="请输入域名：")
-label.pack()
-entry = tk.Entry(root)
-entry.pack()
-button = tk.Button(root, text="检测", command=detect_malicious_domain)
-button.pack()
-
-# 创建Treeview用于显示结果
-columns = ("Domain", "Model Prediction", "Blacklist Result")
-result_tree = ttk.Treeview(root, columns=columns, show="headings")
-result_tree.heading("Domain", text="域名")
-result_tree.heading("Model Prediction", text="模型预测结果")
-result_tree.heading("Blacklist Result", text="黑名单查询结果")
-result_tree.pack()
-
-
-# 运行主事件循环
-root.mainloop()
+plt.tight_layout()
+plt.show()
